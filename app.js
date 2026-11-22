@@ -1,8 +1,7 @@
-// app.js — верзија са позадином по теми + splash na ulazu u kviz
+// app.js — splash 7s na ulasku na sajt, pa meni sa oblastima
 let корен = null;
 let стаза = [];
 let сесија = null;
-let splashPrikazan = false;   // da se splash prikaže samo jednom
 
 const екран = document.getElementById("екран");
 const дугмеНазад = document.getElementById("назад");
@@ -10,17 +9,32 @@ const дугмеНазад = document.getElementById("назад");
 init();
 
 async function init() {
+  // 1) odmah prikaži splash (7s) i paralelno učitaj manifest
+  const splashGotov = прикажиУлазниSplash("splash.jpg", 7000);
+  const manifestGotov = учитајМанифест();
+
+  // 2) sačekaj da prođe splash I da se učita manifest
+  await Promise.all([splashGotov, manifestGotov]);
+
+  // 3) tek sad prikaži meni (ili grešku)
+  if (корен) {
+    стаза = [корен];
+    прикажиТренутни();
+    дугмеНазад.onclick = назад;
+  } else {
+    екран.innerHTML =
+      "<p class='порука'>Грешка: манифест није учитан.</p>";
+  }
+}
+
+async function учитајМанифест() {
   try {
     const одг = await fetch("manifest.json");
     if (!одг.ok) throw new Error("HTTP " + одг.status);
     корен = await одг.json();
-    стаза = [корен];
-    прикажиТренутни();
-    дугмеНазад.onclick = назад;
   } catch (е) {
     console.error("Грешка:", е);
-    екран.innerHTML =
-      "<p class='порука'>Грешка: манифест није учитан.</p>";
+    корен = null;
   }
 }
 
@@ -104,12 +118,7 @@ function започниСесију(карте) {
   const чвор = тренутни();
   поставиПозадину(чвор.позадина);
 
-  if (!splashPrikazan) {
-    splashPrikazan = true;
-    прикажиИграSplash("splash.jpg", () => прикажиСледећу());
-  } else {
-    прикажиСледећу();
-  }
+  прикажиСледећу();
 }
 
 function прикажиСледећу() {
@@ -214,8 +223,8 @@ function прикажиРезултат() {
   document.getElementById("изађи").onclick = назад;
 }
 
-/* ---------- SPLASH NA ULAZU U KVIZ ---------- */
-async function прикажиИграSplash(пут, након) {
+/* ---------- УЛАЗНИ SPLASH (7s na ulasku na sajt) ---------- */
+async function прикажиУлазниSplash(пут, трајање) {
   const splash = document.createElement("div");
   splash.className = "игра-splash";
 
@@ -226,8 +235,11 @@ async function прикажиИграSplash(пут, након) {
 
   document.body.appendChild(splash);
 
+  // fade in
+  requestAnimationFrame(() => splash.classList.add("видљив"));
+
+  // učitaj sliku (konverzija u JPG 80 preko canvas-a)
   try {
-    // učitaj sliku i konvertuj u JPG kvalitet 80 preko canvas-a
     const url = await конвертујУJpg(пут, 0.8);
     слика.src = url;
     await слика.decode().catch(() => {});
@@ -235,17 +247,12 @@ async function прикажиИграSplash(пут, након) {
     console.warn("Splash slika nije učitana:", е);
   }
 
-  // fade in
-  requestAnimationFrame(() => splash.classList.add("видљив"));
+  // čekaj zadato trajanje (7s), pa fade out
+  await new Promise(r => setTimeout(r, трајање));
 
-  // stoji 1.6s, pa fade out i nastavi
-  setTimeout(() => {
-    splash.classList.remove("видљив");
-    setTimeout(() => {
-      splash.remove();
-      након();
-    }, 600);
-  }, 1600);
+  splash.classList.remove("видљив");
+  await new Promise(r => setTimeout(r, 600));
+  splash.remove();
 }
 
 /* konvertuje sliku (png/jpg) u JPG kvalitet 80 preko canvas-a */
